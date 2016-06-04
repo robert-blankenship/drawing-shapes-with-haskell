@@ -36,19 +36,25 @@ drawPolkaDots sceneWidth sceneHeight = do
                 then fillRect(x - rY, y - rY, 2 * rY, 2 * rY)
                 else fillRect(x - rX, y - rX, 2 * rX, 2 * rX)
 
+    let drawPolygon = \points -> do
+            moveTo(points !! 0)
+            foldr addLine (moveTo(points !! 0)) points
+                where addLine (x, y) lines = do
+                        lineTo(x, y)
+                        lines
+    
     let drawTriangle = \(x1, y1) (x2, y2) (x3, y3) -> do
-        moveTo(x1, y1)
-        lineTo(x2, y2)
-        lineTo(x3, y3)
-        lineTo(x1, y1)
+        drawPolygon [(x1, y1), (x2, y2), (x3, y3)]
         stroke()
 
     -- Starting with some outer square defined by x, y, r, 
     -- draw an inscribed triangle pointing at angle (where 0 degrees
     -- is 'up')
     let reducedAngle angle = if angle > (2 * pi) then reducedAngle (angle - 2*pi) else angle
-    
-    let equilateralTriangleAligned angle = \x y s1 s2 -> do
+
+    let polygonAngles n = [(i * 2*pi/n) | i <- [0..n]]
+
+    let regularPolygonAligned n angle = \x y s1 s2 -> do
             let s = (if s1 < s2 then s1 else s2) 
             let h' = minimum possibleHeights
                     where
@@ -58,32 +64,28 @@ drawPolkaDots sceneWidth sceneHeight = do
                             | reducedAngle angle' < (5*pi/4) = abs (s / cos(angle'))
                             | reducedAngle angle' < (7*pi/4) = abs (s / sin(angle'))
                             | reducedAngle angle' <= (2*pi) = abs (s / cos(angle'))
-                        angles = map (\angle' -> angle + angle') [0, 2*pi/3, 4*pi/3]
-                        possibleHeights = map getHeight angles
-
-            let point angle' = (x + (h' * cos(angle + angle')), y + (h' * sin(angle + angle'))) 
-
-            drawTriangle (point (0)) (point (2*pi/3)) (point (4*pi/3))
-            strokeRect(x - s, y - s, 2*s, 2*s)
     
-    let equilateralTriangleAlignedMultiple = \x y s1 s2 -> do
-            (equilateralTriangleAligned (pi/8)) x y s1 s2
-            (equilateralTriangleAligned (2*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (3*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (4*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (5*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (6*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (7*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (8*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (9*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (10*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (11*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (12*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (13*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (14*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (15*pi/8)) x y s1 s2
-            (equilateralTriangleAligned (16*pi/8)) x y s1 s2
+                        angles = map (\angle' -> angle + angle') (polygonAngles n)
+                        possibleHeights = map getHeight angles
+    
+            let point angle' = (x + (h' * cos(angle + angle')), y + (h' * sin(angle + angle')))
+            let points = map (\a -> point a) (polygonAngles n)
+    
+            drawPolygon points
+            stroke()
+            strokeRect(x - s, y - s, 2*s, 2*s)
 
+    -- TODO: This shouldn't draw the first angle twice.
+    let regularPolygonAlignedMultiple n angle iterations = \x y s1 s2 -> do
+            let initialPolygon = (regularPolygonAligned n angle x y s1 s2)
+            let accumulatePolygons angle' accumulator = do
+                    regularPolygonAligned n angle' x y s1 s2
+                    accumulator
+
+            foldr accumulatePolygons (initialPolygon) (polygonAngles iterations)
+ 
+    let equilateralTriangleAligned angle = regularPolygonAligned 3 angle
+    
     let trianglePointingDown = \x y rX rY ->
             drawTriangle (x - rX, y - rY) (x, y + rY) (x + rX, y - rY)
     
@@ -110,7 +112,7 @@ drawPolkaDots sceneWidth sceneHeight = do
                 coordinate i' radius = radius + radius * 2 * fromInteger i'
                 radius i j dimension circlesPerDimension = dimension / (2 * (fromInteger circlesPerDimension))
                 shape i j
-                    | otherwise = equilateralTriangleAlignedMultiple
+                    | otherwise = regularPolygonAlignedMultiple 4 pi 200
 
     let grid = [ elem i j | i <- [0..(circlesX - 1)], j <- [0..(circlesY - 1)] ]
 
